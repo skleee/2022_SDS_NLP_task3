@@ -1,6 +1,7 @@
 # Log file
 logs/
-results
+results/
+checkpoint/
 
 
 # Byte-compiled / optimized / DLL files

@@ -39,7 +39,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int, help='Seed')
     parser.add_argument('--model_backbone', default='kobart_base', type=str)
     parser.add_argument('--model_pretrained', default='gogamza/kobart-summarization', type=str, \
-        help=['gogamza/kobart-base-v1', 'gogamza/kobart-base-v2', 'gogamza/kobart-summarization'])
+        help=['gogamza/kobart-base-v1', 'gogamza/kobart-base-v2', 'gogamza/kobart-summarization',\
+            'hyunwoongko/asian-bart-ecjk'])
     parser.add_argument('--data_dir', default='data', type=str, help='data directory')
     parser.add_argument('--output_dir', default='checkpoint/', type=str, help='Checkpoint directory/')
     parser.add_argument('--result_dir', default='results/', type=str, help='Result directory/')
@@ -54,9 +55,6 @@ if __name__ == '__main__':
     parser.add_argument('--decoder_max_length', default=64, type=int, help='Max sequence length for decoding')
     parser.add_argument('--label_smoothing', default=0.0, type=float, help="Label smoothing factor")
 
-    # Set --make_submission flag when you want to make submission file for dacon
-    parser.add_argument('--make_submission', action='store_true', help='Make submission file')
-    
     p_args = parser.parse_args()
 
     start = time.time()
@@ -98,9 +96,43 @@ if __name__ == '__main__':
     1. Load model and tokenizer
     '''
     # Download model and tokenizer
-    tokenizer = PreTrainedTokenizerFast.from_pretrained(p_args.model_pretrained)
-    # Default pre-trained model is from https://github.com/seujung/KoBART-summarization 
-    model = BartForConditionalGeneration.from_pretrained(p_args.model_pretrained)
+    if p_args.model_pretrained == 'kykim/bertshared-kor-base':
+        from transformers import BertTokenizerFast, EncoderDecoderModel
+        tokenizer = BertTokenizerFast.from_pretrained("kykim/bertshared-kor-base", model_max_length=512)
+        model = EncoderDecoderModel.from_pretrained("kykim/bertshared-kor-base")
+        
+        model.config.min_length = None
+        model.config.decoder_start_token_id = tokenizer.cls_token_id
+        model.config.pad_token_id = tokenizer.pad_token_id
+        model.config.vocab_size = model.config.decoder.vocab_size
+    
+    elif p_args.model_pretrained == 'hyunwoongko/asian-bart-ecjk':
+        '''
+        asian-bart library 설치가 필요합니다.
+        pip install asian-bart
+        '''
+        from asian_bart import AsianBartTokenizer, AsianBartForConditionalGeneration
+        tokenizer = AsianBartTokenizer.from_pretrained("hyunwoongko/asian-bart-ecjk")
+        model = AsianBartForConditionalGeneration.from_pretrained("hyunwoongko/asian-bart-ecjk")
+    
+    elif p_args.model_pretrained == 'paust/pko-t5-base':
+        from transformers import T5TokenizerFast, T5ForConditionalGeneration
+        tokenizer = T5TokenizerFast.from_pretrained('paust/pko-t5-base')
+        model = T5ForConditionalGeneration.from_pretrained('paust/pko-t5-base')
+    
+    elif p_args.model_pretrained == 'facebook/mbart-large-50':
+        from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+        model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50")
+        tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="ko_KR", tgt_lang="ko_KR")
+
+    elif p_args.model_pretrained in ['gogamza/kobart-base-v1', 'cosmoquester/bart-ko-mini', 'gogamza/kobart-summarization', 'gogamza/kobart-base-v2']:
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(p_args.model_pretrained)
+        # Default pre-trained model is from https://github.com/seujung/KoBART-summarization 
+        model = BartForConditionalGeneration.from_pretrained(p_args.model_pretrained)
+    
+    else:
+        print(f"Model {p_args.model_pretrained} is not supported")
+        exit()
 
     # Set model parameters or use the default
     print(model.config)
@@ -195,7 +227,6 @@ if __name__ == '__main__':
         result = {k: round(v, 4) for k, v in result.items()}
         return result
 
-    
     # Training arguments
     # Details; https://huggingface.co/docs/transformers/main_classes/trainer#transformers.Seq2SeqTrainingArguments
     training_args = Seq2SeqTrainingArguments(
